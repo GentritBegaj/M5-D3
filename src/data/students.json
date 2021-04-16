@@ -1,1 +1,11 @@
-[{"name":"John","surname":"Doeee","email":"johndoe@gmail.com","date":"2021-03-31","ID":"1rzgsrjfwokni1q93e","numberOfProjects":1,"imageUrl":"http://localhost:3000/img/students/1rzgsrjfwokni1q93e.jpg"}]
+[
+  {
+    "name": "John",
+    "surname": "Doeee",
+    "email": "johndoe@gmail.com",
+    "date": "2021-03-31",
+    "ID": "1rzgsrjfwokni1q93e",
+    "numberOfProjects": 1,
+    "imageUrl": "http://localhost:3001/img/students/1rzgsrjfwokni1q93e.jpg"
+  }
+]

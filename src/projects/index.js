@@ -131,9 +131,9 @@ router.post(
       );
       const projects = await getProjects();
       const project = projects.find((p) => p.ID === projectId);
-      project.imageUrl = `http://localhost:3000/img/projects/${projectId}${path.extname(
-        req.file.originalname
-      )}`;
+      project.imageUrl = `${req.protocol}://${req.hostname}:${
+        process.env.PORT
+      }/img/projects/${projectId}${path.extname(req.file.originalname)}`;
       const newProjectsArray = projects.filter((pr) => pr.ID !== projectId);
       newProjectsArray.push(project);
       await writeProjects(newProjectsArray);

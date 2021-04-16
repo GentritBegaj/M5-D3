@@ -7,6 +7,7 @@ import {
 import uniqid from "uniqid";
 import multer from "multer";
 import path from "path";
+import checkFileType from "../middlewares/file/index.js";
 
 const router = Router();
 
@@ -69,6 +70,7 @@ router.delete("/:id", async (req, res) => {
 router.post(
   "/:id/uploadPhoto",
   multer().single("profilePic"),
+  checkFileType(["image/jpeg", "image/png", "image/jpg", "application/pdf"]),
   async (req, res, next) => {
     const studentId = req.params.id;
     try {
@@ -78,17 +80,22 @@ router.post(
         `${studentId}${path.extname(req.file.originalname)}`,
         req.file.buffer
       );
+
       const students = await getStudents();
+
       const student = students.find((s) => s.ID === studentId);
-      student.imageUrl = `http://localhost:3000/img/students/${studentId}${path.extname(
-        req.file.originalname
-      )}`;
+      // student.imageUrl = `${req.protocol}://${req.hostname}:${process.env.PORT}/img/projects/${req.file.originalname}`;
+
+      student.imageUrl = `${req.protocol}://${req.hostname}:${
+        process.env.PORT
+      }/img/students/${studentId}${path.extname(req.file.originalname)}`;
       const newStudentsArray = students.filter((st) => st.ID !== studentId);
       newStudentsArray.push(student);
       await writeStudents(newStudentsArray);
       res.status(201).send("Picture added");
     } catch {
       console.log(error);
+      next(error);
     }
   }
 );

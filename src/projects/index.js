@@ -1,35 +1,21 @@
 import express from "express";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 import uniqid from "uniqid";
+import {
+  getStudents,
+  getProjects,
+  writeProjects,
+  writeStudents,
+  writeProjectsPicture,
+} from "../lib/fs-tools.js";
+import multer from "multer";
+import path from "path";
 import { check, validationResult } from "express-validator";
 
 const router = express.Router();
 
-const filename = fileURLToPath(import.meta.url);
-
-const projectsJSONPath = join(dirname(filename), "projects.json");
-
-// console.log(dirname(dirname(filename)));
-const studentsJSONPath = join(
-  dirname(dirname(filename)),
-  "students",
-  "students.json"
-);
-
-const getProjects = () => {
-  const projects = JSON.parse(fs.readFileSync(projectsJSONPath).toString());
-  return projects;
-};
-const getStudents = () => {
-  const students = JSON.parse(fs.readFileSync(studentsJSONPath).toString());
-  return students;
-};
-
-router.get("/", (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
-    const projects = getProjects();
+    const projects = await getProjects();
     if (req.query && req.query.name) {
       const filteredProjects = projects.filter(
         (project) =>
@@ -44,9 +30,9 @@ router.get("/", (req, res, next) => {
   }
 });
 
-router.get("/:id", (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const projects = getProjects();
+    const projects = await getProjects();
     const project = projects.find((project) => project.ID === req.params.id);
     res.status(200).send(project);
   } catch (error) {
@@ -54,10 +40,11 @@ router.get("/:id", (req, res) => {
   }
 });
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const projects = getProjects();
-    const students = getStudents();
+    const projects = await getProjects();
+    const students = await getStudents();
+
     const { studentId } = req.body;
     const student = students.find((s) => s.ID === studentId);
     if (student) {
@@ -69,12 +56,12 @@ router.post("/", (req, res) => {
       newProject.ID = uniqid();
       newProject.createdAt = new Date();
       projects.push(newProject);
-      fs.writeFileSync(projectsJSONPath, JSON.stringify(projects));
+      await writeProjects(projects);
       const newStudentsArray = students.filter((s) => s.ID !== studentId);
       numberOfProjects++;
       student.numberOfProjects = numberOfProjects;
       newStudentsArray.push(student);
-      fs.writeFileSync(studentsJSONPath, JSON.stringify(newStudentsArray));
+      await writeStudents(newStudentsArray);
 
       res.status(201).send(newProject.ID);
     } else {
@@ -85,31 +72,31 @@ router.post("/", (req, res) => {
   }
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
-    const projects = getProjects();
+    const projects = await getProjects();
     const newProjectsArray = projects.filter(
       (project) => project.ID !== req.params.id
     );
     const modifiedProject = req.body;
     modifiedProject.ID = req.params.id;
     newProjectsArray.push(modifiedProject);
-    fs.writeFileSync(projectsJSONPath, JSON.stringify(newProjectsArray));
+    await writeProjects(newProjectsArray);
     res.status(201).send("Project modified");
   } catch (error) {
     console.log(error);
   }
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
-    const projects = getProjects();
+    const projects = await getProjects();
     const project = projects.find((p) => p.ID === req.params.id);
     const newProjectsArray = projects.filter(
       (project) => project.ID !== req.params.id
     );
-    fs.writeFileSync(projectsJSONPath, JSON.stringify(newProjectsArray));
-    const students = getStudents();
+    await writeProjects(newProjectsArray);
+    const students = await getStudents();
     const student = students.find(
       (student) => student.ID === project.studentId
     );
@@ -118,19 +105,43 @@ router.delete("/:id", (req, res) => {
     ).length;
     student.numberOfProjects = newNumberOfProjects;
 
-    console.log("SSSSSSSSSSSSSS", student);
-
     const newStudentsArray = students.filter(
       (student) => student.ID !== project.studentId
     );
 
     newStudentsArray.push(student);
-    fs.writeFileSync(studentsJSONPath, JSON.stringify(newStudentsArray));
+    await writeStudents(newStudentsArray);
 
     res.status(204).send("Project deleted");
   } catch (error) {
     console.log(error);
   }
 });
+
+router.post(
+  "/:id/uploadPhoto",
+  multer().single("projectPic"),
+  async (req, res, next) => {
+    const projectId = req.params.id;
+    try {
+      console.log(req.file.originalname);
+      writeProjectsPicture(
+        `${projectId}${path.extname(req.file.originalname)}`,
+        req.file.buffer
+      );
+      const projects = await getProjects();
+      const project = projects.find((p) => p.ID === projectId);
+      project.imageUrl = `http://localhost:3000/img/projects/${projectId}${path.extname(
+        req.file.originalname
+      )}`;
+      const newProjectsArray = projects.filter((pr) => pr.ID !== projectId);
+      newProjectsArray.push(project);
+      await writeProjects(newProjectsArray);
+      res.status(201).send("Picture of project added");
+    } catch (error) {
+      console.log(error);
+    }
+  }
+);
 
 export default router;

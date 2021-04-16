@@ -1,46 +1,35 @@
-import express from "express";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { Router } from "express";
+import {
+  getStudents,
+  writeStudents,
+  writeStudentsPicture,
+} from "../lib/fs-tools.js";
 import uniqid from "uniqid";
+import multer from "multer";
+import path from "path";
 
-const router = express.Router();
+const router = Router();
 
-const filename = fileURLToPath(import.meta.url);
-
-const studentsJSONPath = join(dirname(filename), "students.json");
-
-router.get("/", (req, res) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const fileAsAJSON = JSON.parse(fileAsAString);
-
-  res.send(fileAsAJSON);
-  console.log(fileAsAJSON);
+router.get("/", async (req, res) => {
+  const students = await getStudents();
+  res.send(students);
 });
 
-router.get("/:id", (req, res) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const students = JSON.parse(fileAsAString);
-
+router.get("/:id", async (req, res) => {
+  const students = await getStudents();
   const student = students.find((student) => student.ID == req.params.id);
   res.send(student);
 });
 
-router.post("/", (req, res) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const students = JSON.parse(fileAsAString);
-
+router.post("/", async (req, res) => {
+  const students = await getStudents();
   const newStudent = req.body;
-  // console.log("NEW STUDENT", newStudent);
 
   if (duplicateEmailCheck(newStudent.email)) {
     newStudent.ID = uniqid();
     students.push(newStudent);
 
-    fs.writeFileSync(studentsJSONPath, JSON.stringify(students));
+    await writeStudents(students);
     res.status(201).send({ id: newStudent.ID });
   } else {
     console.log("Duplicate email address");
@@ -48,39 +37,81 @@ router.post("/", (req, res) => {
   }
 });
 
-router.put("/:id", (req, res) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const students = JSON.parse(fileAsAString);
-  const newStudentsArray = students.filter(
-    (student) => student.ID !== req.params.id
-  );
+router.put("/:id", async (req, res) => {
+  try {
+    const students = await getStudents();
+    const newStudentsArray = students.filter(
+      (student) => student.ID !== req.params.id
+    );
 
-  const modifiedStudent = req.body;
-  modifiedStudent.ID = req.params.id;
-  newStudentsArray.push(modifiedStudent);
+    const modifiedStudent = req.body;
+    modifiedStudent.ID = req.params.id;
+    newStudentsArray.push(modifiedStudent);
 
-  fs.writeFileSync(studentsJSONPath, JSON.stringify(newStudentsArray));
-  res.status(201).send("Student modified");
+    await writeStudents(newStudentsArray);
+    res.status(201).send("Student modified");
+  } catch (error) {
+    console.log(error);
+  }
 });
 
-router.delete("/:id", (req, res) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const students = JSON.parse(fileAsAString);
+router.delete("/:id", async (req, res) => {
+  const students = await getStudents();
 
   const newStudentsArray = students.filter(
     (student) => student.ID !== req.params.id
   );
-  fs.writeFileSync(studentsJSONPath, JSON.stringify(newStudentsArray));
+
+  await writeStudents(newStudentsArray);
   res.status(204).send();
 });
 
-const duplicateEmailCheck = (email) => {
-  const fileAsABuffer = fs.readFileSync(studentsJSONPath);
-  const fileAsAString = fileAsABuffer.toString();
-  const studentsArray = JSON.parse(fileAsAString);
+router.post(
+  "/:id/uploadPhoto",
+  multer().single("profilePic"),
+  async (req, res, next) => {
+    const studentId = req.params.id;
+    try {
+      console.log(req.file);
+      console.log(path.extname(req.file.originalname));
+      await writeStudentsPicture(
+        `${studentId}${path.extname(req.file.originalname)}`,
+        req.file.buffer
+      );
+      const students = await getStudents();
+      const student = students.find((s) => s.ID === studentId);
+      student.imageUrl = `http://localhost:3000/img/students/${studentId}${path.extname(
+        req.file.originalname
+      )}`;
+      const newStudentsArray = students.filter((st) => st.ID !== studentId);
+      newStudentsArray.push(student);
+      await writeStudents(newStudentsArray);
+      res.status(201).send("Picture added");
+    } catch {
+      console.log(error);
+    }
+  }
+);
 
+router.post(
+  "/uploadMultiple",
+  multer().array("multipleProfilePic", 2),
+  async (req, res, next) => {
+    try {
+      const arrayOfPromises = req.files.map(
+        async (file) =>
+          await writeStudentsPicture(file.originalname, file.buffer)
+      );
+      await Promise.all(arrayOfPromises);
+      res.send("Pictures uploaded");
+    } catch (error) {
+      console.log(error);
+    }
+  }
+);
+
+const duplicateEmailCheck = async (email) => {
+  const studentsArray = await getStudents();
   const filteredStudentsArray = studentsArray.filter(
     (student) => student.email.toLowerCase() === email.toLowerCase()
   );
